@@ -334,6 +334,7 @@ impl WindowInner {
                 dimensions: current_dims,
                 window_state: get_window_state(self.hwnd.0),
                 live_resizing: self.in_size_move,
+                screen_changed: false,
             });
         }
 
@@ -1754,20 +1755,26 @@ unsafe fn mouse_button(hwnd: HWND, msg: UINT, wparam: WPARAM, lparam: LPARAM) ->
     }
     let (modifiers, mouse_buttons) = mods_and_buttons(wparam);
     let coords = mouse_coords(lparam);
+    let platform_click_count = match msg {
+        WM_LBUTTONDBLCLK | WM_RBUTTONDBLCLK | WM_MBUTTONDBLCLK => 2,
+        _ => 1,
+    };
     let event = MouseEvent {
         kind: match msg {
-            WM_LBUTTONDOWN => MouseEventKind::Press(MousePress::Left),
+            WM_LBUTTONDOWN | WM_LBUTTONDBLCLK => MouseEventKind::Press(MousePress::Left),
             WM_LBUTTONUP => MouseEventKind::Release(MousePress::Left),
-            WM_RBUTTONDOWN => MouseEventKind::Press(MousePress::Right),
+            WM_RBUTTONDOWN | WM_RBUTTONDBLCLK => MouseEventKind::Press(MousePress::Right),
             WM_RBUTTONUP => MouseEventKind::Release(MousePress::Right),
-            WM_MBUTTONDOWN => MouseEventKind::Press(MousePress::Middle),
+            WM_MBUTTONDOWN | WM_MBUTTONDBLCLK => MouseEventKind::Press(MousePress::Middle),
             WM_MBUTTONUP => MouseEventKind::Release(MousePress::Middle),
             _ => return None,
         },
         coords,
         screen_coords: client_to_screen(hwnd, coords),
+        window_origin: client_to_screen(hwnd, Point::new(0, 0)),
         mouse_buttons,
         modifiers,
+        platform_click_count,
     };
     inner
         .borrow_mut()
@@ -1816,8 +1823,10 @@ unsafe fn nc_mouse_button(
         },
         coords,
         screen_coords: client_to_screen(hwnd, coords),
+        window_origin: client_to_screen(hwnd, Point::new(0, 0)),
         mouse_buttons,
         modifiers,
+        platform_click_count: 2,
     };
     inner
         .borrow_mut()
@@ -1849,8 +1858,10 @@ unsafe fn mouse_move(hwnd: HWND, _msg: UINT, wparam: WPARAM, lparam: LPARAM) -> 
         kind: MouseEventKind::Move,
         coords,
         screen_coords: client_to_screen(hwnd, coords),
+        window_origin: client_to_screen(hwnd, Point::new(0, 0)),
         mouse_buttons,
         modifiers,
+        platform_click_count: 0,
     };
 
     inner.events.dispatch(WindowEvent::MouseEvent(event));
@@ -1885,8 +1896,10 @@ unsafe fn nc_mouse_move(hwnd: HWND, _msg: UINT, wparam: WPARAM, lparam: LPARAM) 
         kind: MouseEventKind::Move,
         coords,
         screen_coords: client_to_screen(hwnd, coords),
+        window_origin: client_to_screen(hwnd, Point::new(0, 0)),
         mouse_buttons,
         modifiers,
+        platform_click_count: 0,
     };
 
     inner.events.dispatch(WindowEvent::MouseEvent(event));
@@ -1977,8 +1990,10 @@ unsafe fn mouse_wheel(hwnd: HWND, msg: UINT, wparam: WPARAM, lparam: LPARAM) -> 
         },
         coords,
         screen_coords,
+        window_origin: client_to_screen(hwnd, Point::new(0, 0)),
         mouse_buttons,
         modifiers,
+        platform_click_count: 0,
     };
     inner
         .borrow_mut()
