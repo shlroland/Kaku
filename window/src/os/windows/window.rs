@@ -4,8 +4,8 @@ use crate::parameters::{self, Parameters};
 use crate::{
     Appearance, Clipboard, ClipboardData, DeadKeyStatus, Dimensions, Handled, KeyCode, KeyEvent,
     Modifiers, MouseButtons, MouseCursor, MouseEvent, MouseEventKind, MousePress, Point,
-    RawKeyEvent, Rect, RequestedWindowGeometry, ResolvedGeometry, ScreenPoint, ScreenRect,
-    ULength, WindowDecorations, WindowEvent, WindowEventSender, WindowOps, WindowState,
+    RawKeyEvent, Rect, RequestedWindowGeometry, ResolvedGeometry, ScreenPoint, ScreenRect, ULength,
+    WindowDecorations, WindowEvent, WindowEventSender, WindowOps, WindowState,
 };
 use anyhow::{bail, Context};
 use async_trait::async_trait;

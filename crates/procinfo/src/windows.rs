@@ -399,6 +399,10 @@ impl LocalProcessInfo {
             LocalProcessInfo {
                 pid: info.th32ProcessID,
                 ppid: info.th32ParentProcessID,
+                // Win32 exposes process trees but not POSIX process groups.
+                // Keeping each process in its own group is the conservative
+                // choice for foreground-process heuristics.
+                pgid: info.th32ProcessID,
                 name,
                 executable,
                 cwd,
