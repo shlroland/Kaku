@@ -1,4 +1,7 @@
+#[cfg(target_os = "macos")]
 mod macos;
+#[cfg(windows)]
+mod windows;
 
 use std::sync::Mutex;
 
@@ -16,7 +19,21 @@ impl ToastNotification {
     }
 }
 
+#[cfg(target_os = "macos")]
 use macos as backend;
+#[cfg(windows)]
+use windows as backend;
+
+#[cfg(not(any(target_os = "macos", windows)))]
+mod nop {
+    use super::*;
+
+    pub fn show_notif(_: ToastNotification) -> Result<(), Box<dyn std::error::Error>> {
+        Ok(())
+    }
+}
+#[cfg(not(any(target_os = "macos", windows)))]
+use nop as backend;
 
 pub fn show(notif: ToastNotification) {
     if let Err(err) = backend::show_notif(notif) {
