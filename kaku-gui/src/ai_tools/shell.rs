@@ -28,9 +28,11 @@ pub(super) fn kill_process_group(child: &std::process::Child) {
 
 #[cfg(windows)]
 pub(super) fn kill_process_group(child: &std::process::Child) {
-    // ConPTY has no POSIX process group. Killing the direct shell still
-    // promptly releases the Preview's tool invocation.
-    let _ = child.kill();
+    // ConPTY has no POSIX process group. `taskkill /T` terminates the shell
+    // and its descendants, which is the closest equivalent for a tool run.
+    let _ = std::process::Command::new("taskkill.exe")
+        .args(["/PID", &child.id().to_string(), "/T", "/F"])
+        .status();
 }
 
 fn default_shell() -> String {
