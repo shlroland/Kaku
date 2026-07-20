@@ -3,7 +3,9 @@
 use anyhow::{Context, Result};
 use std::collections::HashMap;
 use std::io::Read;
+#[cfg(unix)]
 use std::os::unix::fs::OpenOptionsExt;
+#[cfg(unix)]
 use std::os::unix::process::CommandExt;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
@@ -17,13 +19,42 @@ pub(super) const SHELL_EXEC_TIMEOUT_SECS: u64 = 60;
 
 /// SIGKILL the entire process group. Required because `Child::kill()` only
 /// signals the direct child (the login shell), leaving grandchildren running.
+#[cfg(unix)]
 pub(super) fn kill_process_group(child: &std::process::Child) {
     unsafe {
         libc::killpg(child.id() as libc::pid_t, libc::SIGKILL);
     }
 }
 
+#[cfg(windows)]
+pub(super) fn kill_process_group(child: &std::process::Child) {
+    // ConPTY has no POSIX process group. Killing the direct shell still
+    // promptly releases the Preview's tool invocation.
+    let _ = child.kill();
+}
+
+fn default_shell() -> String {
+    #[cfg(unix)]
+    {
+        std::env::var("SHELL").unwrap_or_else(|_| "/bin/bash".into())
+    }
+    #[cfg(windows)]
+    {
+        std::env::var("COMSPEC").unwrap_or_else(|_| "cmd.exe".into())
+    }
+}
+
 fn shell_exec_wrapper(command: &str, cwd_tmp_path: &Path, shell: &str) -> String {
+    #[cfg(windows)]
+    {
+        let _ = shell;
+        // `cd` prints the current directory on cmd.exe; it provides the
+        // post-command working directory without requiring a Unix shell.
+        return format!(r#"{} & cd > "{}""#, command, cwd_tmp_path.display());
+    }
+
+    #[cfg(unix)]
+    {
     let is_fish = Path::new(shell)
         .file_name()
         .and_then(|name| name.to_str())
@@ -41,6 +72,7 @@ fn shell_exec_wrapper(command: &str, cwd_tmp_path: &Path, shell: &str) -> String
             command,
             cwd_tmp_path.display()
         )
+    }
     }
 }
 
@@ -117,24 +149,26 @@ pub(super) fn exec_shell_exec(
     // create_new + mode 0o600 ensures we own the file exclusively before the shell writes to it.
     // Propagate on failure: an EEXIST or symlink collision here would allow the shell redirection
     // to follow a pre-placed symlink, turning this into a write-anywhere primitive.
-    std::fs::OpenOptions::new()
-        .create_new(true)
-        .write(true)
-        .mode(0o600)
+    let mut cwd_options = std::fs::OpenOptions::new();
+    cwd_options.create_new(true).write(true);
+    #[cfg(unix)]
+    cwd_options.mode(0o600);
+    cwd_options
         .open(&cwd_tmp_path)
         .with_context(|| format!("could not create temp cwd file {}", cwd_tmp_path.display()))?;
-    let shell = std::env::var("SHELL").unwrap_or_else(|_| "/bin/bash".into());
+    let shell = default_shell();
     let wrapped = shell_exec_wrapper(command, &cwd_tmp_path, &shell);
     let streaming_cap = cap.saturating_sub(512);
 
-    let mut child = std::process::Command::new(&shell)
-        .arg("-l")
-        .arg("-c")
-        .arg(&wrapped)
+    let mut command = std::process::Command::new(&shell);
+    #[cfg(unix)]
+    command.arg("-l").arg("-c").arg(&wrapped).process_group(0);
+    #[cfg(windows)]
+    command.arg("/D").arg("/S").arg("/C").arg(&wrapped);
+    let mut child = command
         .current_dir(&exec_cwd)
         .stdout(std::process::Stdio::piped())
         .stderr(std::process::Stdio::piped())
-        .process_group(0)
         .spawn()
         .with_context(|| format!("shell exec failed ({})", shell))?;
 
@@ -248,15 +282,16 @@ pub(super) fn exec_shell_bg(args: &serde_json::Value, cwd: &mut String) -> Resul
         .map(|p| resolve(p, cwd))
         .transpose()?
         .unwrap_or_else(|| PathBuf::from(cwd.as_str()));
-    let shell = std::env::var("SHELL").unwrap_or_else(|_| "/bin/bash".into());
-    let mut child = std::process::Command::new(&shell)
-        .arg("-l")
-        .arg("-c")
-        .arg(command)
+    let shell = default_shell();
+    let mut child_command = std::process::Command::new(&shell);
+    #[cfg(unix)]
+    child_command.arg("-l").arg("-c").arg(command).process_group(0);
+    #[cfg(windows)]
+    child_command.arg("/D").arg("/S").arg("/C").arg(command);
+    let mut child = child_command
         .current_dir(&exec_cwd)
         .stdout(std::process::Stdio::piped())
         .stderr(std::process::Stdio::piped())
-        .process_group(0)
         .spawn()
         .with_context(|| format!("failed to spawn background command: {}", command))?;
     let pid = child.id();

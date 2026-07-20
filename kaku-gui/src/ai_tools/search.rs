@@ -2,6 +2,7 @@
 
 use anyhow::{Context, Result};
 use std::io::{BufRead, Read};
+#[cfg(unix)]
 use std::os::unix::process::CommandExt;
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex, OnceLock};
@@ -320,8 +321,9 @@ pub(super) fn exec_symbol_search(
     };
 
     cmd.stdout(std::process::Stdio::piped())
-        .stderr(std::process::Stdio::null())
-        .process_group(0);
+        .stderr(std::process::Stdio::null());
+    #[cfg(unix)]
+    cmd.process_group(0);
     let mut child = cmd.spawn().context("symbol_search exec failed")?;
 
     let stdout_pipe = child
@@ -469,8 +471,9 @@ pub(super) fn exec_grep_search(
     };
 
     cmd.stdout(std::process::Stdio::piped())
-        .stderr(std::process::Stdio::piped())
-        .process_group(0);
+        .stderr(std::process::Stdio::piped());
+    #[cfg(unix)]
+    cmd.process_group(0);
     let mut child = cmd.spawn().context("grep_search exec failed")?;
     let stdout = child
         .stdout
