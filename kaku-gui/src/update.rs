@@ -140,6 +140,13 @@ struct StagedUpdateLock {
 
 impl StagedUpdateLock {
     fn try_acquire() -> anyhow::Result<Self> {
+        #[cfg(windows)]
+        {
+            anyhow::bail!("self-updates are not available in the Windows Preview");
+        }
+
+        #[cfg(unix)]
+        {
         let dir = config::DATA_DIR.clone();
         config::create_user_owned_dirs(&dir)
             .map_err(|e| anyhow!("failed to create data dir for staging lock: {}", e))?;
@@ -167,6 +174,7 @@ impl StagedUpdateLock {
             ));
         }
         Ok(Self { _file: file })
+        }
     }
 }
 
@@ -745,6 +753,7 @@ pub fn start_update_checker() {
         // permission dialog on first launch, rather than lazily when a
         // notification fires. This runs just after the first paint (see
         // paint_impl) so the init cost stays off the first-frame path.
+        #[cfg(target_os = "macos")]
         wezterm_toast_notification::macos_initialize();
 
         // Register callback so a notification click asks for confirmation

@@ -10,6 +10,8 @@ use crate::overlay::{
     start_overlay_pane, CopyModeParams, CopyOverlay, LauncherArgs, LauncherFlags,
     QuickSelectOverlay,
 };
+#[cfg(not(target_os = "macos"))]
+use crate::overlay::confirm_close_window;
 use crate::resize_increment_calculator::ResizeIncrementCalculator;
 use crate::scripting::guiwin::GuiWin;
 use crate::scrollbar::*;
