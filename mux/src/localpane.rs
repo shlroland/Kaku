@@ -638,7 +638,12 @@ impl Pane for LocalPane {
         // Consider only the tty's foreground process group so backgrounded
         // daemons spawned by the shell (e.g. gitstatusd) don't count as a
         // stateful process at an otherwise idle prompt.
+        #[cfg(unix)]
         let fg_pgid = self.pty.lock().process_group_leader().map(|p| p as u32);
+        // ConPTY does not expose a POSIX foreground process group. Fall back
+        // to evaluating the pane's visible process tree on Windows.
+        #[cfg(windows)]
+        let fg_pgid: Option<u32> = None;
 
         if let Some(info) = self.divine_process_list(CachePolicy::FetchImmediate) {
             log::trace!(
